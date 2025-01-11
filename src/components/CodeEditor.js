@@ -175,14 +175,40 @@ const CodeEditor = () => {
   };
 
   const formatCode = () => {
-    const formattedCode = js(code, {
-      indent_size: 2,
-      space_in_empty_paren: true,
-      end_with_newline: true,
-    });
-    updateEditorContent(formattedCode); // Update editor with formatted code
-    setCode(formattedCode); // Update local state with formatted code
-  };
+    try {
+        // Format only the code content
+        const formattedCode = js(code, {
+            indent_size: 2,
+            space_in_empty_paren: true,
+            end_with_newline: true,
+        });
+
+        // Update the iframe editor content
+        if (editorRef.current) {
+            editorRef.current.contentWindow.postMessage(
+                {
+                    eventType: "populateCode",
+                    language: "javascript",
+                    files: [
+                        {
+                            name: "script.js",
+                            content: formattedCode,
+                        },
+                    ],
+                },
+                "*"
+            );
+        }
+
+        // Update the state with formatted code
+        setCode(formattedCode);
+
+        console.log("Code formatted successfully.");
+    } catch (error) {
+        console.error("Error formatting code:", error);
+    }
+};
+
 
   // Attach message listener
   useEffect(() => {
