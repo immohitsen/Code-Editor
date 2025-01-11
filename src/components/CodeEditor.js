@@ -1,5 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AppBar, Toolbar, Button, Switch, Typography, Box, Tooltip, Fab } from "@mui/material";
+import {
+  AppBar,
+  Toolbar,
+  Button,
+  Switch,
+  Typography,
+  Box,
+  Tooltip,
+  Fab,
+} from "@mui/material";
 import Cookies from "js-cookie";
 import { debounce } from "lodash";
 import { styled } from "@mui/system";
@@ -68,17 +77,83 @@ const CodeEditor = () => {
 
   // Run code
   const runCode = () => {
-    if (editorRef.current) {
-      editorRef.current.contentWindow.postMessage(
-        {
-          eventType: "triggerRun",
-        },
-        "*"
-      );
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 3000);
+    let listenerCleanedUp = false;
+    
+    try {
+        if (!editorRef.current) {
+            console.warn("Editor reference not available");
+            return;
+        }
+
+        const handleIframeMessage = (e) => {
+            try {
+                const { action, result } = e.data || {};
+                
+                // Only process messages from our iframe
+                if (!editorRef.current || e.source !== editorRef.current.contentWindow) {
+                    return;
+                }
+
+                if (action === "runComplete") { // Changed from runStart to runComplete
+                    const success = result?.success;
+                    console.log("Final run result:", success);
+                    
+                    // Only show confetti if we have a definitive success
+                    if (success === true) {
+                        setShowConfetti(true);
+                        setTimeout(() => {
+                            setShowConfetti(false);
+                        }, 3000);
+                    } else {
+                        // Ensure confetti is hidden for failed runs
+                        setShowConfetti(false);
+                    }
+                    
+                    // Clean up listener
+                    if (!listenerCleanedUp) {
+                        window.removeEventListener("message", handleIframeMessage);
+                        listenerCleanedUp = true;
+                    }
+                }
+            } catch (error) {
+                console.error("Error handling iframe message:", error);
+                setShowConfetti(false);
+                if (!listenerCleanedUp) {
+                    window.removeEventListener("message", handleIframeMessage);
+                    listenerCleanedUp = true;
+                }
+            }
+        };
+
+        // Remove any existing confetti before starting new run
+        setShowConfetti(false);
+
+        // Add the message listener
+        window.addEventListener("message", handleIframeMessage);
+
+        // Trigger the run command
+        editorRef.current.contentWindow.postMessage(
+            {
+                eventType: "triggerRun",
+            },
+            "*"
+        );
+        
+        // Cleanup listener and ensure confetti is hidden if no response 
+        setTimeout(() => {
+            if (!listenerCleanedUp) {
+                setShowConfetti(false);
+                window.removeEventListener("message", handleIframeMessage);
+                listenerCleanedUp = true;
+                console.warn("Run command timed out");
+            }
+        }, 5000);
+
+    } catch (error) {
+        console.error("Error running code:", error);
+        setShowConfetti(false);
     }
-  };
+}; 
 
   const formatCode = () => {
     const formattedCode = js(code, {
@@ -113,17 +188,17 @@ const CodeEditor = () => {
 
   return (
     <StyledBox darkMode={darkMode}>
-        <AppBar position="static" sx={{ bgcolor: darkMode ? "#333" : "#1976d2" }}>
+      <AppBar position="static" sx={{ bgcolor: darkMode ? "#333" : "#1976d2" }}>
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             My Code Editor
           </Typography>
           <Switch checked={darkMode} onChange={toggleTheme} color="default" />
           <Typography variant="subtitle1">
-          {darkMode ? "Dark Mode" : "Light Mode"}
-        </Typography>
+            {darkMode ? "Dark Mode" : "Light Mode"}
+          </Typography>
         </Toolbar>
-      </AppBar>      
+      </AppBar>
       <Box display="flex" gap={2} mb={3} mt={7}>
         <Tooltip title="Run Code">
           <Fab color="primary" onClick={runCode}>
